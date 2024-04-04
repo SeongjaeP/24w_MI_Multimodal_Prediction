@@ -76,12 +76,15 @@ class MlpMixer(nn.Module):
         # [batch, hidden_dim, seq_len] -> [batch, seq_len, hidden_dim]
         x = x.permute(0, 2, 1)
 
+        # PE 추가
+        x = x + self.position_embeddings
+
         for block in self.blocks:
             x = block(x)
 
         x = self.head_layer_norm(x)
-        x = x.mean(dim=1)   # Global average pooling
-        
+        # x = x.mean(dim=1)   # Global average pooling
+        x = x.max(dim=1)[0] # Max pooling
         
         # Classifier head
         x = self.head(x)
