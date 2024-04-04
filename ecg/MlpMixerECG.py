@@ -23,33 +23,26 @@ class MlpBlock(nn.Module):
 class MixerBlock(nn.Module):
     def __init__(self, hidden_dim, token_dim, token_mlp_dim, channel_mlp_dim):
         super().__init__()
-        # Token mixing MLP
         self.mlp_token = MlpBlock(token_dim, token_mlp_dim)
-        # Channel mixing MLP
         self.mlp_channel = MlpBlock(hidden_dim, channel_mlp_dim)
-        # Layer normalization before token mixing
         self.layer_norm_1 = nn.LayerNorm(hidden_dim)
-        # Layer normalization before channel mixing
         self.layer_norm_2 = nn.LayerNorm(hidden_dim)
 
     def forward(self, x):
-        # Apply layer normalization before token mixing
         y = self.layer_norm_1(x)
-        # Token mixing across the sequence length dimension
-        y = y.permute(0, 2, 1)
+        y = y.permute(0, 2, 1)  #행렬 전치 수행
         y = self.mlp_token(y)
         y = y.permute(0, 2, 1)
         # Residual connection for token mixing
         x = x + y
-        # Apply layer normalization before channel mixing
+
         y = self.layer_norm_2(x)
         # Channel mixing across the hidden dimension
         y = self.mlp_channel(y)
         # Residual connection for channel mixing
         x = x + y
+
         return x
-
-
 
 
 class MlpMixer(nn.Module):
@@ -60,8 +53,11 @@ class MlpMixer(nn.Module):
         self.seq_len = seq_len
         self.num_blocks = num_blocks
 
-        # ECG 데이터를 위한 1D 컨볼루션 임베딩: 시계열 데이터의 각 포인트를 하나의 '패치'로 처리
+        # 1D 컨볼루션 임베딩 - 시계열 데이터의 각 포인트를 하나의 '패치'로 처리
         self.conv_embedding = nn.Conv1d(num_channels, hidden_dim, kernel_size=1)
+
+        # PE 추가: 학습 가능한 위치 벡터
+        self.position_embeddings = nn.Parameter(torch.zeros(1, seq_len, hidden_dim))
 
         # Mixer 블록
         self.blocks = nn.ModuleList([
@@ -83,9 +79,9 @@ class MlpMixer(nn.Module):
         for block in self.blocks:
             x = block(x)
 
-        # Global average pooling
         x = self.head_layer_norm(x)
-        x = x.mean(dim=1)
+        x = x.mean(dim=1)   # Global average pooling
+        
         
         # Classifier head
         x = self.head(x)
