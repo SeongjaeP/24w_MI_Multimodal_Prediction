@@ -1,6 +1,7 @@
 
 import torch
 import torch.nn as nn
+import math
 
 
 class MlpBlock(nn.Module):
@@ -56,8 +57,10 @@ class MlpMixer(nn.Module):
         # 1D 컨볼루션 임베딩 - 시계열 데이터의 각 포인트를 하나의 '패치'로 처리
         self.conv_embedding = nn.Conv1d(num_channels, hidden_dim, kernel_size=1)
 
-        # PE 추가: 학습 가능한 위치 벡터
-        self.position_embeddings = nn.Parameter(torch.zeros(1, seq_len, hidden_dim))
+        self.pe = nn.Parameter(self.position_embeddings(seq_len, hidden_dim), requires_grad=False)
+
+        # # PE 추가: 학습 가능한 위치 벡터
+        # self.position_embeddings = nn.Parameter(torch.zeros(1, seq_len, hidden_dim))
 
         # Mixer 블록
         self.blocks = nn.ModuleList([
@@ -69,6 +72,15 @@ class MlpMixer(nn.Module):
         self.head_layer_norm = nn.LayerNorm(hidden_dim)
         self.head = nn.Linear(hidden_dim, num_classes)
 
+    def position_embeddings(self, seq_len, hidden_dim):
+        position = torch.arange(0, seq_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, hidden_dim, 2) * -(math.log(10000.0) / hidden_dim))
+        pe = torch.zeros(seq_len, hidden_dim)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        return pe.unsqueeze(0)
+
     def forward(self, x):
         # [batch, channels, seq_len] -> [batch, hidden_dim, seq_len]
         x = self.conv_embedding(x)
@@ -77,7 +89,7 @@ class MlpMixer(nn.Module):
         x = x.permute(0, 2, 1)
 
         # PE 추가
-        x = x + self.position_embeddings
+        x = x + self.pe
 
         for block in self.blocks:
             x = block(x)
